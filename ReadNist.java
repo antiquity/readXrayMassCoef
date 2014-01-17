@@ -7,13 +7,26 @@ public class ReadNist {
     public static void main(String[] args) throws Exception {
         ReadNist reader=new ReadNist();
         String url;
-        String html = ParseHTML.readHTML("http://www.nist.gov/pml/data/xraycoef/");
+        ParseHTML home = new ParseHTML("http://www.nist.gov/pml/data/xraycoef/");
 
-        url = ParseHTML.getLink(html,"\\s*Table\\s*2.\\s*");
+        if(args.length!=0){
+            String fn = args[0];
+            if(!fn.equals("")){
+            }
+        }
+
+        url = home.getLink("\\s*Table\\s*1.\\s*");
+        ArrayList<Material> table1=reader.readTable1(url);
+        if(fn
+
+        url = home.getLink("\\s*Table\\s*2.\\s*");
         ArrayList<Material> table2=reader.readTable2(url);
 
-        url = ParseHTML.getLink(html,"\\s*Table\\s*4.\\s*");
-        ArrayList<ArrayList<double[]>> table4=reader.readTable4(url,table2);
+        url = home.getLink("\\s*Table\\s*3.\\s*");
+        ArrayList<ArrayList<double[]>> table3=reader.lookupTable(url,table1);
+
+        url = home.getLink("\\s*Table\\s*4.\\s*");
+        ArrayList<ArrayList<double[]>> table4=reader.lookupTable(url,table2);
 
         /*
         System.out.print("density=[\n");
@@ -31,17 +44,6 @@ public class ReadNist {
         }
         System.out.println("];\n");
 
-        Iterator<double[]> itr3;
-        double[] tmp;
-        for(int i=1; i<1+mcTable.size(); i++){
-            System.out.printf("mac{%d} = [\n",i);
-            itr3=reader.readTable3(i).iterator();
-            while(itr3.hasNext()){
-                tmp=itr3.group();
-                System.out.printf("%9e, %8e, %8e;\n", tmp[0],tmp[1],tmp[2]);
-            }
-            System.out.printf("];\n\n");
-        }
         */
     }
 
@@ -170,21 +172,34 @@ public class ReadNist {
         return mcTable;
     }
 
-    ArrayList<ArrayList<double[]>> readTable4(String url, ArrayList<Material> list){
+    /*
+    ArrayList<ArrayList<double[]>> lookupTable(String url, ArrayList<Material> list){
+        Iterator<double[]> itr3;
+        double[] tmp;
+        for(int i=1; i<1+mcTable.size(); i++){
+            System.out.printf("mac{%d} = [\n",i);
+            itr3=reader.readTable3(i).iterator();
+            while(itr3.hasNext()){
+                tmp=itr3.group();
+                System.out.printf("%9e, %8e, %8e;\n", tmp[0],tmp[1],tmp[2]);
+            }
+            System.out.printf("];\n\n");
+        }
+        return res;
+    }
+    */
+
+    ArrayList<ArrayList<double[]>> lookupTable(String url, ArrayList<Material> list){
         String in=ParseHTML.readHTML(url);
         ArrayList<ArrayList<double[]>> res = new ArrayList<ArrayList<double[]>>();
         for(int i=0; i<list.size(); i++) res.add(null);
 
         ParseHTML table=new ParseHTML(in,"table");
-        if(! table.hasNext() )
-            return null;
+        if(! table.hasNext() ) return null;
         table.refine("tr");
 
-        int col,row=0;
-        //System.out.println(content);
-        ArrayList<Material> mcTable=new ArrayList<Material>();
-        int id=0;
-        String sym="", name="", cell;
+        int row=0;
+        String cell;
 
         ParseHTML rowHTML;
         Iterator<String> itr;
@@ -226,7 +241,7 @@ public class ReadNist {
                         if(res.get(i)!=null)
                             System.err.println("ERR: \""+list.get(i).name+"\" has already been found");
                         else
-                            res.set(i,readAttenTable(temp));
+                            res.set(i,readAttenTable(temp,3));
                         //System.out.println("finished reading 
                         //"+list.get(i).sym);
                         break;
@@ -238,40 +253,43 @@ public class ReadNist {
         return res;
     }
 
-    ArrayList<double[]> readAttenTable(String url){
+    ArrayList<double[]> readAttenTable(String url, int nc){
         String in=ParseHTML.readHTML(url);
 
         ParseHTML table=new ParseHTML(in, "table");
-        if(table.hasNext())
-            table.refine();
-        if(table.hasNext())
-            table.refine("tr");
+        if(table.hasNext()) table.refine();
+        if(table.hasNext()) table.refine("tr");
 
         Matcher temp;
         ArrayList<double[]> macTable=new ArrayList<double[]>();
         int c;
         double[] data;
+        String[] cell;
         while(table.hasNext()){
-            temp = Pattern.compile("[0-9.+\\-Ee]+").matcher(table.group());
+            //String test=table.group().replaceAll("\\n"," 
+            //").replaceAll("(?ims)<[^>]*>"," ");
+            cell = table.group().replaceAll("\\n"," ").replaceAll("(?ims)<[^>]*>"," ").trim().split("[\\s]+");
+            //temp = Pattern.compile().matcher(cell);
             c=0;
-            data=new double[3];
-            while(c<3 && temp.find()){
+            data=new double[nc];
+            for(int i=0; i< cell.length && c<nc; i++){
                 try{
-                    data[c]=Double.parseDouble(temp.group());
+                    if(cell[i].matches("(\\d\\.\\d*[eE\\+\\-]{1,2}\\d*)|([0-9\\.]+)"))
+                        data[c]=Double.parseDouble(cell[i]);
+                    else continue;
                 }catch(Exception e){
                     continue;
                 }
                 c++;
             }
-            if(c==3){
+            if(c==nc){
                 macTable.add(data);
-                System.out.println(Arrays.toString(data));
+                //System.out.println(Arrays.toString(data));
+                //System.out.println(Arrays.toString(cell));
             }
         }
         return macTable;
     }
-
-
 }
 
 class Material{

@@ -3,6 +3,7 @@ import java.util.*;
 import java.net.*;
 import java.io.*;
 public class ParseHTML{
+    private String url;
     private String content;
     private String tag;
     private Matcher matcher;
@@ -10,12 +11,32 @@ public class ParseHTML{
     int[] innerRegion = new int[2], outerRegion= new int[2];
     int count=0;
 
-    ParseHTML(String content){
-        this(content,"html");
+    static String readHTML(String url){
+        StringBuilder content=new StringBuilder();
+        try{
+            URL html = new URL(url);
+            BufferedReader inRead = new BufferedReader(
+                    new InputStreamReader(html.openStream()));
+            String inputLine;
+            while ((inputLine = inRead.readLine()) != null)
+                content.append(inputLine+"\n");
+            inRead.close();
+        }catch(Exception e){
+            System.err.println(e);
+        }
+        //System.out.println(content);
+        //System.out.println(parseMark("table",content.toString(),1)[0]);
+        return content.toString();
     }
 
-    ParseHTML(String content, String tag){
-        this.content=content;
+    ParseHTML(String url){
+        this(url,"html");
+    }
+
+    ParseHTML(String url, String tag){
+        this.url = url;
+        if(url!=null)
+            this.content=readHTML(url);
         this.tag=tag;
         String regex="(?ims)</?" + tag + "((\\s[^>]*)|([^>]*))>";
         matcher=Pattern.compile(regex).matcher(content);
@@ -23,6 +44,10 @@ public class ParseHTML{
         //        + (Pattern.CASE_INSENSITIVE | Pattern.DOTALL));
         recursive=setRec(tag);
         count=0;
+    }
+
+    void setContent(String con){
+        this.content = con; this.url = null;
     }
 
     void setTag(String tag){
@@ -33,20 +58,11 @@ public class ParseHTML{
         count=0;
     }
 
-    void setRegion(int s, int e){ 
-        matcher.region(s,e);
-        count=0;
-    }
+    void setRegion(int s, int e){ matcher.region(s,e); count=0; }
 
-    void refine(){
-        matcher.region(innerRegion[0],innerRegion[1]);
-        count=0;
-    }
+    void refine(){ matcher.region(innerRegion[0],innerRegion[1]); count=0; }
 
-    void refine(String tag){
-        setTag(tag);
-        refine();
-    }
+    void refine(String tag){ setTag(tag); refine(); }
 
     ParseHTML copy(){
         ParseHTML res=new ParseHTML(content,tag);
@@ -54,9 +70,7 @@ public class ParseHTML{
         return res;
     }
 
-    String group(){
-        return content.substring(innerRegion[0],innerRegion[1]);
-    }
+    String group(){ return content.substring(innerRegion[0],innerRegion[1]); }
 
     void reset(){
         matcher.region(matcher.regionStart(), matcher.regionEnd());
@@ -95,24 +109,26 @@ public class ParseHTML{
                 //System.out.println("depth=" + depth);
                 if(matcher.find()){
                     count++; innerCount++;
-                    closeTag[0]=matcher.start(); closeTag[1]=matcher.end();
-                    if(matcher.group().charAt(1)=='/')
+                    if(matcher.group().charAt(1)=='/'){
                         depth--;
-                    else{
+                        if(depth==0){
+                            closeTag[0]=matcher.start(); closeTag[1]=matcher.end();
+                        }
+                    }else{
                         if(recursive)
                             depth++;
                         else{
-                            innerRegion[1]=matcher.start();
-                            outerRegion[1]=matcher.start();
+                            closeTag[0]=matcher.start(); closeTag[1]=matcher.start();
                             find(count-1);
-                            System.err.println("alone tag: "+matcher.group() +
-                                    " at L:" + getLineNumber(matcher.start()));
+                            System.err.println("non-recursive tag: "+matcher.group() +
+                                    "; stop at L:" + getLineNumber(matcher.start()));
                             //System.err.println("Search from: " +
                             //        content.substring(matcher.regionStart(),matcher.regionEnd()));
-                            return true;
+                            depth = 0;
                         }
                     }
                 }else{
+                    //System.out.println(content);
                     System.err.printf("L:%d, no closing tag for %s!\n",
                             getLineNumber(openTag[0]), content.substring(openTag[0],openTag[1]));
                     System.err.print("depth: " + depth);
@@ -120,15 +136,15 @@ public class ParseHTML{
                     //System.err.printf("last found: " + content.substring(lastFind[0],lastFind[1]));
                     //System.err.println("Search from: " +
                     //        content.substring(matcher.regionStart(),matcher.regionEnd()));
+
+                    closeTag[0]=matcher.regionEnd(); closeTag[1]=matcher.regionEnd();
                     reset();
-                    return false;
+                    depth = 0;
                 }
             }
-            innerRegion[1]=matcher.start();
-            outerRegion[1]=matcher.end();
+            innerRegion[1]=closeTag[0]; outerRegion[1]=closeTag[1];
             return true;
-        }else
-            reset();
+        }else reset();
         return false;
     }
 
@@ -165,23 +181,7 @@ public class ParseHTML{
         return false;
     }
 
-    static String readHTML(String url){
-        StringBuilder content=new StringBuilder();
-        try{
-            URL html = new URL(url);
-            BufferedReader inRead = new BufferedReader(
-                    new InputStreamReader(html.openStream()));
-            String inputLine;
-            while ((inputLine = inRead.readLine()) != null)
-                content.append(inputLine+"\n");
-            inRead.close();
-        }catch(Exception e){
-            System.err.println(e);
-        }
-        //System.out.println(content);
-        //System.out.println(parseMark("table",content.toString(),1)[0]);
-        return content.toString();
-    }
+    String getLink(String str){ return getLink(content,str); }
 
     static String getLink(String html, String str){
         String regex="(?ims)<\\s*a[^>]*href=[^>]*\"(?<url>[^\">]*)\"[^>]*>" + str + "</a>";
