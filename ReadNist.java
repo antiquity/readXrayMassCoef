@@ -224,7 +224,7 @@ public class ReadNist {
                         }
                         find = true;
                         if(res.get(i)!=null)
-                            System.err.println("ERR: \""+res.get(i).name+"\" has already been found");
+                            System.err.println("ERR: \""+list.get(i).name+"\" has already been found");
                         else
                             res.set(i,readAttenTable(temp));
                         //System.out.println("finished reading 
@@ -247,23 +247,17 @@ public class ReadNist {
         if(table.hasNext())
             table.refine("tr");
 
-        ParseHTML rowHTML;
-        Iterator<String> itr;
-
+        Matcher temp;
         ArrayList<double[]> macTable=new ArrayList<double[]>();
-        int c; String cell;
+        int c;
         double[] data;
         while(table.hasNext()){
-            rowHTML=table.copy();
-            rowHTML.refine("t(d|h)");
-            itr=rowHTML.findAll().iterator();
-
+            temp = Pattern.compile("[0-9.+\\-Ee]+").matcher(table.group());
             c=0;
             data=new double[3];
-            while(itr.hasNext()){
-                cell=itr.next().trim();
+            while(c<3 && temp.find()){
                 try{
-                    data[c]=Double.parseDouble(cell);
+                    data[c]=Double.parseDouble(temp.group());
                 }catch(Exception e){
                     continue;
                 }
@@ -271,7 +265,7 @@ public class ReadNist {
             }
             if(c==3){
                 macTable.add(data);
-                //System.out.println(Arrays.toString(data));
+                System.out.println(Arrays.toString(data));
             }
         }
         return macTable;
@@ -300,26 +294,20 @@ class Material{
             id,sym, name, za, i, density);
     }
     boolean pairs(String fn){
-        String[] n = name.replaceAll("(&\\a{4,4};)|(\\n)","")
-            .toLowerCase().split("[\\-\\(\\),/\\s]+");
-        fn = fn.replaceAll("(&\\a{4,4};)|(\\n)","").toLowerCase();
-        fn = fn.replaceAll("[\\-\\(\\),/\\s]","");
-        int N = n.length;
-        int count=0;
-        for(int i=0; i<N; i++){
-            if(fn.contains(n[i])) count++;
-        }
-            if(n[0].equals("polyethylene")){
-                System.out.println(Arrays.toString(n));
-                System.out.println(count +" out of " + N);
-            }
-        if(count>= 0.9 * N){
-            if(count!=N && n[0].equals("polyethylene")){
-                System.out.println(Arrays.toString(n));
-                System.out.println(count +" out of " + N);
-            }
-            return true;
-        }else return false;
+        String[] n = name.toLowerCase().replaceAll("(\\&[a-z]{4,4};)|(\\n)","")
+            .split("[\\-\\(\\),/\\s]+");
+        String[] m = fn.toLowerCase().replaceAll("(\\&[a-z]{4,4};)|(\\n)","")
+            .split("[\\-\\(\\),/\\s]+");
+        boolean res=true;
+        if(m.length==n.length){
+            for(int i=0; i< m.length; i++)
+                if(!m[i].equals(n[i])) res=false;
+        }else res=false;
+        //if(m[0].equals("polyethylene") && m[0].equals(n[0])){
+        //    System.out.println(Arrays.toString(n));
+        //    System.out.println(Arrays.toString(m));
+        //}
+        return res;
     }
 }
 
@@ -349,6 +337,5 @@ class Composition extends Material{
 /*
             table4=ParseHTML.readHTML(ParseHTML.getLink(html,"\\s*Table 4.\\s*"));
             table4 = table4.toLowerCase();
-            table4 = table4.replaceAll("&\\a{4,4};","");
 
             */

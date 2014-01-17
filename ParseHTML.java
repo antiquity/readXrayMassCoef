@@ -121,8 +121,7 @@ public class ParseHTML{
                     //System.err.println("Search from: " +
                     //        content.substring(matcher.regionStart(),matcher.regionEnd()));
                     reset();
-                    throw new EmptyStackException();
-                    //return false;
+                    return false;
                 }
             }
             innerRegion[1]=matcher.start();
