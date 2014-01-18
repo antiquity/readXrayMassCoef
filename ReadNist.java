@@ -7,53 +7,62 @@ public class ReadNist {
     public static void main(String[] args) throws Exception {
         ReadNist reader=new ReadNist();
         String url;
+        PrintWriter out=null;
         ParseHTML home = new ParseHTML("http://www.nist.gov/pml/data/xraycoef/");
 
         if(args.length!=0){
             String fn = args[0];
             if(!fn.equals("")){
+                out = new PrintWriter(new BufferedWriter(new FileWriter(fn)));
             }
         }
 
         url = home.getLink("\\s*Table\\s*1.\\s*");
         ArrayList<Material> table1=reader.readTable1(url);
-        if(fn
 
+        /*
         url = home.getLink("\\s*Table\\s*2.\\s*");
         ArrayList<Material> table2=reader.readTable2(url);
 
+        if(out!=null){
+            ArrayList<Material> namelist = new ArrayList<Material>();
+            Material temp;
+            namelist.addAll(table1);
+            namelist.addAll(table2);
+            for(int i=0; i< namelist.size(); i++){
+                temp = namelist.get(i);
+                out.printf("symbols{%d}='%s';  \\%%s\n",i+1,temp.sym, temp.name);
+            }
+            out.printf("zaid=[");
+            for(int i=0; i< namelist.size(); i++){
+                temp = namelist.get(i);
+                out.printf("\n%g, %g, %e;",temp.za, temp.i, temp.density);
+            }
+            out.println("];");
+            for(int i=0; i< namelist.size(); i++){
+                temp = namelist.get(i);
+                if(((Composition)temp).comp!=null){
+                    out.printf("comp{%d}=[" + ((Composition)temp).comp + ";\n" +
+                            ((Composition)temp).prop + "]';", i+1);
+                }
+            }
+        }
+
+        /*
         url = home.getLink("\\s*Table\\s*3.\\s*");
         ArrayList<ArrayList<double[]>> table3=reader.lookupTable(url,table1);
 
         url = home.getLink("\\s*Table\\s*4.\\s*");
         ArrayList<ArrayList<double[]>> table4=reader.lookupTable(url,table2);
-
-        /*
-        System.out.print("density=[\n");
-        while(itr.hasNext()){
-            System.out.println(itr.next().density+"; ");
-        }
-        System.out.println("];\n");
-
-        url = ParseHTML.getLink(html,"\\s*Table 1.\\s*");
-        ArrayList<Material> mcTable=reader.readTable1(url);
-        Iterator<Material> itr=mcTable.iterator();
-        System.out.print("density=[\n");
-        while(itr.hasNext()){
-            System.out.println(itr.group().density+"; ");
-        }
-        System.out.println("];\n");
-
         */
     }
 
     ArrayList<Material> readTable1(String url) throws Exception{
-        String in=ParseHTML.readHTML(url);
-
-        ParseHTML table=new ParseHTML(in,"table");
+        ParseHTML table=new ParseHTML(url,"table");
         if(! table.hasNext() )
             return null;
-        table.refine("tr");
+        table.refine(); table.setTag("tr");
+        //System.out.println(table.getContent());
 
         Material singlerow;
         int col;
@@ -63,13 +72,15 @@ public class ReadNist {
         double za=0,i=0,density=0;
         String sym="", name="", cell;
 
-        ParseHTML rowHTML;
         Iterator<String> itr;
 
+        System.err.println("table.group()1");
+
         while(table.hasNext()){
-            rowHTML=table.copy();
-            rowHTML.refine("t(d|h)");
-            itr=rowHTML.findAll().iterator();
+            //System.err.println(table.group());
+            table.stash(); table.refine(); table.setTag("t(d|h)");
+            itr=table.findAll().iterator();
+            table.stashPop();
 
             col=0;
             while(itr.hasNext()){
@@ -112,7 +123,7 @@ public class ReadNist {
         ParseHTML table=new ParseHTML(in,"table");
         if(! table.hasNext() )
             return null;
-        table.refine("tr");
+        table.refine(); table.setTag("tr");
 
         Composition singlerow;
         int col,row=0;
@@ -122,7 +133,6 @@ public class ReadNist {
         double za=0,i=0,density=0;
         String sym="", name="", cell;
 
-        ParseHTML rowHTML;
         Iterator<String> itr;
 
         while(table.hasNext()){
@@ -130,9 +140,9 @@ public class ReadNist {
             row++;
             //System.out.println(table.group());
             if(row<=2) continue;
-            rowHTML=table.copy();
-            rowHTML.refine("t(d|h)");
-            itr=rowHTML.findAll().iterator();
+            table.stash(); table.refine(); table.setTag("t(d|h)");
+            itr=table.findAll().iterator();
+            table.stashPop();
 
             col=0;
             while(itr.hasNext()){
@@ -196,12 +206,11 @@ public class ReadNist {
 
         ParseHTML table=new ParseHTML(in,"table");
         if(! table.hasNext() ) return null;
-        table.refine("tr");
+        table.refine(); table.setTag("tr");
 
         int row=0;
         String cell;
 
-        ParseHTML rowHTML;
         Iterator<String> itr;
         String temp;
         URI tU;
@@ -211,9 +220,9 @@ public class ReadNist {
             //if(row>4) System.exit(0);
             //System.out.println(table.group().replaceAll("\\n",""));
             //System.out.println(table.group());
-            rowHTML=table.copy();
-            rowHTML.refine("t(d|h)");
-            itr=rowHTML.findAll().iterator();
+            table.stash(); table.refine(); table.setTag("t(d|h)");
+            itr=table.findAll().iterator();
+            table.stashPop();
             while(itr.hasNext()){
                 cell = itr.next().trim();
                 //System.out.println(cell);
@@ -258,7 +267,8 @@ public class ReadNist {
 
         ParseHTML table=new ParseHTML(in, "table");
         if(table.hasNext()) table.refine();
-        if(table.hasNext()) table.refine("tr");
+        if(table.hasNext()) table.refine();
+        table.setTag("tr");
 
         Matcher temp;
         ArrayList<double[]> macTable=new ArrayList<double[]>();

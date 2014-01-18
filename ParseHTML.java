@@ -9,7 +9,7 @@ public class ParseHTML{
     private Matcher matcher;
     private boolean recursive;
     int[] innerRegion = new int[2], outerRegion= new int[2];
-    int count=0;
+    private ArrayDeque<State> stack;
 
     static String readHTML(String url){
         StringBuilder content=new StringBuilder();
@@ -43,7 +43,7 @@ public class ParseHTML{
         //System.out.println(pattern.flags()+" "
         //        + (Pattern.CASE_INSENSITIVE | Pattern.DOTALL));
         recursive=setRec(tag);
-        count=0;
+        stack = new ArrayDeque<State>();
     }
 
     void setContent(String con){
@@ -55,60 +55,48 @@ public class ParseHTML{
         String regex="(?ims)</?" + tag + "((\\s[^>]*)|([^>]*))>";
         matcher.usePattern(Pattern.compile(regex));
         recursive=setRec(tag);
-        count=0;
     }
 
-    void setRegion(int s, int e){ matcher.region(s,e); count=0; }
-
-    void refine(){ matcher.region(innerRegion[0],innerRegion[1]); count=0; }
-
-    void refine(String tag){ setTag(tag); refine(); }
-
-    ParseHTML copy(){
-        ParseHTML res=new ParseHTML(content,tag);
-        res.innerRegion=innerRegion; res.outerRegion=outerRegion;
-        return res;
+    void refine(){
+        //System.out.println(Arrays.toString(innerRegion));
+        //System.out.println(content.length() + " " + matcher.regionStart() + " " + matcher.regionEnd());
+        content = content.substring(innerRegion[0],innerRegion[1]);
+        matcher.reset(content);
     }
 
-    String group(){ return content.substring(innerRegion[0],innerRegion[1]); }
+    String getContent(){ return content;}
 
-    void reset(){
-        matcher.region(matcher.regionStart(), matcher.regionEnd());
-        count=0;
+    String group(){
+        //System.out.println("from group(): " + Arrays.toString(innerRegion));
+        return content.substring(innerRegion[0],innerRegion[1]); }
+
+    void stash(){
+        stack.push(new State(content, matcher.start(), matcher.pattern()));
     }
 
-    int find(int ith){
-        reset();
-        while(matcher.find()){
-            count++;
-            if(count==ith) break;
-        }
-        return count;
+    void stashPop(){
+        content = stack.pop().recover(matcher);
     }
 
     boolean hasNext(){
+        int[] openTag = new int[2], closeTag= new int[2];
+        int depth=0;
         if(matcher.find()){
-            int[] openTag={matcher.start(), matcher.end()};
-            int[] closeTag=new int[2];
-            int depth=0, innerCount=0;
-            innerRegion[0]=matcher.end();
-            outerRegion[0]=matcher.start();
             if(matcher.group().charAt(1)=='/'){
+                System.err.println("ERR: " + url);
                 System.err.printf("L:%d, no opening tag for %s!\n",
-                        getLineNumber(openTag[0]), content.substring(openTag[0],openTag[1]));
-                System.err.print("depth: " + depth);
-                System.err.println("; innerCount: " + innerCount);
-                System.err.println("last found: " + content.substring(openTag[0],openTag[1]));
+                        getLineNumber(matcher.start()), matcher.group());
                 //System.err.println("Search from: " +
                 //        content.substring(matcher.regionStart(),matcher.regionEnd()));
-                //reset
-                return false;
+                System.err.println("t1");
+                innerRegion[0] = matcher.regionStart(); innerRegion[1] = matcher.start();
+                return true;
             }
-            depth++; innerCount++; count++;
+            openTag[0]=matcher.start(); openTag[1]=matcher.end();
+            depth++;  
             while(depth>0){
                 //System.out.println("depth=" + depth);
                 if(matcher.find()){
-                    count++; innerCount++;
                     if(matcher.group().charAt(1)=='/'){
                         depth--;
                         if(depth==0){
@@ -118,33 +106,33 @@ public class ParseHTML{
                         if(recursive)
                             depth++;
                         else{
-                            closeTag[0]=matcher.start(); closeTag[1]=matcher.start();
-                            find(count-1);
+                            System.err.println("ERR: " + url);
                             System.err.println("non-recursive tag: "+matcher.group() +
                                     "; stop at L:" + getLineNumber(matcher.start()));
-                            //System.err.println("Search from: " +
-                            //        content.substring(matcher.regionStart(),matcher.regionEnd()));
+                            System.err.println("t2");
+
+                            closeTag[0]=matcher.start(); closeTag[1]=matcher.start();
+                            matcher.find(openTag[0]);  // go back to the previous match in case
                             depth = 0;
                         }
                     }
                 }else{
-                    //System.out.println(content);
+                    System.err.println("ERR: " + url);
                     System.err.printf("L:%d, no closing tag for %s!\n",
                             getLineNumber(openTag[0]), content.substring(openTag[0],openTag[1]));
-                    System.err.print("depth: " + depth);
-                    System.err.println("; count: " + count);
+                    System.err.println("depth: " + depth);
                     //System.err.printf("last found: " + content.substring(lastFind[0],lastFind[1]));
                     //System.err.println("Search from: " +
                     //        content.substring(matcher.regionStart(),matcher.regionEnd()));
 
+                            System.err.println("t3");
                     closeTag[0]=matcher.regionEnd(); closeTag[1]=matcher.regionEnd();
-                    reset();
                     depth = 0;
                 }
             }
-            innerRegion[1]=closeTag[0]; outerRegion[1]=closeTag[1];
+            innerRegion[0]=openTag[1]; innerRegion[1]=closeTag[0];
             return true;
-        }else reset();
+        }
         return false;
     }
 
@@ -154,7 +142,7 @@ public class ParseHTML{
 
     ArrayList<String> findAll(int limit){
         ArrayList<String> output = new ArrayList<String>();
-        int depth=0, count=0, lastFind=0;
+        int count=0;
         while(hasNext()){
             output.add(group()); count++;
             if(limit>0 && count>=limit) break;
@@ -193,5 +181,18 @@ public class ParseHTML{
             //System.out.println(matcher.group("url"));
             return matcher.group("url");
         }else return null;
+    }
+}
+
+class State{
+    String content;
+    int cu;
+    Pattern p;
+    State(String con, int c, Pattern d){
+        cu = c; p = d; content = con;
+    }
+    String recover(Matcher m){
+        m.usePattern(p); m.reset(content); m.find(cu);
+        return content;
     }
 }
