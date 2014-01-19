@@ -9,7 +9,7 @@ public class ParseHTML{
     private Matcher matcher;
     private boolean recursive;
     int[] innerRegion = new int[2], outerRegion= new int[2];
-    private ArrayDeque<State> stack;
+    ArrayDeque<State> stack;
 
     static String readHTML(String url){
         StringBuilder content=new StringBuilder();
@@ -60,22 +60,27 @@ public class ParseHTML{
     void refine(){
         //System.out.println(Arrays.toString(innerRegion));
         //System.out.println(content.length() + " " + matcher.regionStart() + " " + matcher.regionEnd());
-        content = content.substring(innerRegion[0],innerRegion[1]);
-        matcher.reset(content);
+        matcher.region(innerRegion[0],innerRegion[1]);
     }
 
     String getContent(){ return content;}
 
     String group(){
         //System.out.println("from group(): " + Arrays.toString(innerRegion));
-        return content.substring(innerRegion[0],innerRegion[1]); }
-
-    void stash(){
-        stack.push(new State(content, matcher.start(), matcher.pattern()));
+        return content.substring(innerRegion[0],innerRegion[1]);
     }
 
-    void stashPop(){
-        content = stack.pop().recover(matcher);
+    void stash(){
+        stack.push(new State(matcher.regionStart(), matcher.regionEnd(),
+                    innerRegion[1], tag, innerRegion, outerRegion));
+    }
+
+    boolean stashPop(){
+        State tt = stack.pop();
+        setTag(tt.tag);
+        innerRegion = tt.innerRegion;
+        outerRegion = tt.outerRegion;
+        return tt.recover(matcher);
     }
 
     boolean hasNext(){
@@ -86,10 +91,8 @@ public class ParseHTML{
                 System.err.println("ERR: " + url);
                 System.err.printf("L:%d, no opening tag for %s!\n",
                         getLineNumber(matcher.start()), matcher.group());
-                //System.err.println("Search from: " +
-                //        content.substring(matcher.regionStart(),matcher.regionEnd()));
-                System.err.println("t1");
-                innerRegion[0] = matcher.regionStart(); innerRegion[1] = matcher.start();
+
+                innerRegion[0] = matcher.end(); innerRegion[1] = matcher.end();
                 return true;
             }
             openTag[0]=matcher.start(); openTag[1]=matcher.end();
@@ -109,23 +112,29 @@ public class ParseHTML{
                             System.err.println("ERR: " + url);
                             System.err.println("non-recursive tag: "+matcher.group() +
                                     "; stop at L:" + getLineNumber(matcher.start()));
-                            System.err.println("t2");
 
                             closeTag[0]=matcher.start(); closeTag[1]=matcher.start();
-                            matcher.find(openTag[0]);  // go back to the previous match in case
+                            // go back to the previous match in case
+                            matcher.region(matcher.regionStart(),matcher.regionEnd());
+                            while(matcher.find()){
+                                if(matcher.start()<openTag[0]) continue;
+                                else{
+                                    if(matcher.start()==openTag[0]){
+                                        break;
+                                    }else{  // pass the anchor point
+                                        System.err.println("Couldn't find back exactly!");
+                                        break;
+                                    }
+                                }
+                            }
                             depth = 0;
                         }
                     }
                 }else{
                     System.err.println("ERR: " + url);
-                    System.err.printf("L:%d, no closing tag for %s!\n",
-                            getLineNumber(openTag[0]), content.substring(openTag[0],openTag[1]));
-                    System.err.println("depth: " + depth);
-                    //System.err.printf("last found: " + content.substring(lastFind[0],lastFind[1]));
-                    //System.err.println("Search from: " +
-                    //        content.substring(matcher.regionStart(),matcher.regionEnd()));
+                    System.err.printf("L:%d, depth:%d, no closing tag for %s!\n",
+                            getLineNumber(openTag[0]), depth, content.substring(openTag[0],openTag[1]));
 
-                            System.err.println("t3");
                     closeTag[0]=matcher.regionEnd(); closeTag[1]=matcher.regionEnd();
                     depth = 0;
                 }
@@ -185,14 +194,23 @@ public class ParseHTML{
 }
 
 class State{
-    String content;
-    int cu;
-    Pattern p;
-    State(String con, int c, Pattern d){
-        cu = c; p = d; content = con;
+    int rs,re,cu;
+    String tag;
+    int[] innerRegion, outerRegion;
+    State(int a, int b, int c, String tag, int[] innerRegion, int[] outerRegion){
+        rs=a; re=b; cu = c; this.tag = tag;
+        this.innerRegion = innerRegion;
+        this.outerRegion = outerRegion;
     }
-    String recover(Matcher m){
-        m.usePattern(p); m.reset(content); m.find(cu);
-        return content;
+    boolean recover(Matcher m){
+        m.region(rs,re);
+        while(m.find()){
+            if(m.start()<cu) continue;
+            else{
+               if(m.start()==cu) return true;
+               else return false; // pass the anchor point
+            }
+        }
+        return true;
     }
 }
