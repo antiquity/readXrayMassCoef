@@ -20,9 +20,14 @@ public class ReadNist {
         url = home.getLink("\\s*Table\\s*1.\\s*");
         ArrayList<Material> table1=reader.readTable1(url);
 
-        /*
         url = home.getLink("\\s*Table\\s*2.\\s*");
         ArrayList<Material> table2=reader.readTable2(url);
+
+        url = home.getLink("\\s*Table\\s*3.\\s*");
+        ArrayList<ArrayList<double[]>> table3=reader.lookupTable(url,table1);
+
+        url = home.getLink("\\s*Table\\s*4.\\s*");
+        ArrayList<ArrayList<double[]>> table4=reader.lookupTable(url,table2);
 
         if(out!=null){
             ArrayList<Material> namelist = new ArrayList<Material>();
@@ -31,30 +36,48 @@ public class ReadNist {
             namelist.addAll(table2);
             for(int i=0; i< namelist.size(); i++){
                 temp = namelist.get(i);
-                out.printf("symbols{%d}='%s';  \\%%s\n",i+1,temp.sym, temp.name);
+                out.printf("symbols{%3d}=%-15s   %% %s\n",i+1,"'"+temp.sym+"';", temp.name);
             }
-            out.printf("zaid=[");
+            out.printf("\n\nzaid=[\t%% Z/A I and density");
             for(int i=0; i< namelist.size(); i++){
                 temp = namelist.get(i);
-                out.printf("\n%g, %g, %e;",temp.za, temp.i, temp.density);
+                out.printf("\n\t%g, %g, %e;",temp.za, temp.i, temp.density);
             }
-            out.println("];");
+            out.println("];\n\n");
             for(int i=0; i< namelist.size(); i++){
                 temp = namelist.get(i);
-                if(((Composition)temp).comp!=null){
-                    out.printf("comp{%d}=[" + ((Composition)temp).comp + ";\n" +
-                            ((Composition)temp).prop + "]';", i+1);
+                if(temp instanceof Composition){
+                    out.printf("comp{%3d}=[%s;\n%11s%s]';\n",i+1,((Composition)temp).comp, 
+                            "",((Composition)temp).prop);
                 }
             }
+
+            ArrayList<ArrayList<double[]>> mac = new ArrayList<ArrayList<double[]>>();
+            mac.addAll(table3);
+            mac.addAll(table4);
+
+            ArrayList<double[]> itr;
+            double[] tmp;
+            for(int i=0; i<mac.size(); i++){
+                out.printf("mac{%d} = [",i+1);
+                itr=mac.get(i);
+                if(itr==null){
+                    System.err.printf("i=%d, %s, itr is null\n",i,namelist.get(i).name);
+                    out.printf("];\n\n");
+                    continue;
+                }
+                for(int j=0; j<itr.size(); j++){
+                    tmp=itr.get(j);
+                    if(tmp==null || tmp.length!=3){
+                        System.err.printf("(i,j)=(%d,%d), tmp has some problem\n",i,j);
+                        continue;
+                    }
+                    out.printf("\n\t%9e, %8e, %8e;", tmp[0],tmp[1],tmp[2]);
+                }
+                out.printf("];\n\n");
+            }
+            out.close();
         }
-
-        /*
-        url = home.getLink("\\s*Table\\s*3.\\s*");
-        ArrayList<ArrayList<double[]>> table3=reader.lookupTable(url,table1);
-
-        url = home.getLink("\\s*Table\\s*4.\\s*");
-        ArrayList<ArrayList<double[]>> table4=reader.lookupTable(url,table2);
-        */
     }
 
     ArrayList<Material> readTable1(String url) throws Exception{
@@ -73,8 +96,6 @@ public class ReadNist {
         String sym="", name="", cell;
 
         Iterator<String> itr;
-
-        System.err.println("table.group()1");
 
         while(table.hasNext()){
             //System.err.println(table.group());
@@ -118,9 +139,7 @@ public class ReadNist {
     }
 
     ArrayList<Material> readTable2(String url){
-        String in=ParseHTML.readHTML(url);
-
-        ParseHTML table=new ParseHTML(in,"table");
+        ParseHTML table=new ParseHTML(url,"table");
         if(! table.hasNext() )
             return null;
         table.refine(); table.setTag("tr");
@@ -182,29 +201,11 @@ public class ReadNist {
         return mcTable;
     }
 
-    /*
     ArrayList<ArrayList<double[]>> lookupTable(String url, ArrayList<Material> list){
-        Iterator<double[]> itr3;
-        double[] tmp;
-        for(int i=1; i<1+mcTable.size(); i++){
-            System.out.printf("mac{%d} = [\n",i);
-            itr3=reader.readTable3(i).iterator();
-            while(itr3.hasNext()){
-                tmp=itr3.group();
-                System.out.printf("%9e, %8e, %8e;\n", tmp[0],tmp[1],tmp[2]);
-            }
-            System.out.printf("];\n\n");
-        }
-        return res;
-    }
-    */
-
-    ArrayList<ArrayList<double[]>> lookupTable(String url, ArrayList<Material> list){
-        String in=ParseHTML.readHTML(url);
         ArrayList<ArrayList<double[]>> res = new ArrayList<ArrayList<double[]>>();
         for(int i=0; i<list.size(); i++) res.add(null);
 
-        ParseHTML table=new ParseHTML(in,"table");
+        ParseHTML table=new ParseHTML(url,"table");
         if(! table.hasNext() ) return null;
         table.refine(); table.setTag("tr");
 
@@ -225,10 +226,10 @@ public class ReadNist {
             table.stashPop();
             while(itr.hasNext()){
                 cell = itr.next().trim();
+                temp = ParseHTML.getLink(cell,".+?");
                 //System.out.println(cell);
-                temp = ParseHTML.getLink(cell,"[^><]+");
                 if(temp!=null)
-                    cell = cell.replaceAll("(?ims)<\\s*/?a[^>]*>","");
+                    cell = cell.replaceAll("(?ims)<[^>]+>","");
                 else continue;
                 //System.out.println(cell);
 
@@ -237,7 +238,8 @@ public class ReadNist {
                     if(list.get(i).pairs(cell)){
                         //System.out.println(cell + " pairs " + 
                         //list.get(i).name);
-                        list.get(i).sym = temp.replaceAll(".*/","").replaceAll("\\..*","");
+                        if(list.get(i) instanceof Composition)
+                            list.get(i).sym = temp.replaceAll(".*/","").replaceAll("\\..*","");
                         //System.out.println(list.get(i).sym);
                         try{
                             tU = new URI(url).resolve(temp);
@@ -263,9 +265,7 @@ public class ReadNist {
     }
 
     ArrayList<double[]> readAttenTable(String url, int nc){
-        String in=ParseHTML.readHTML(url);
-
-        ParseHTML table=new ParseHTML(in, "table");
+        ParseHTML table=new ParseHTML(url, "table");
         if(table.hasNext()) table.refine();
         if(table.hasNext()) table.refine();
         table.setTag("tr");
@@ -331,7 +331,7 @@ class Material{
             for(int i=0; i< m.length; i++)
                 if(!m[i].equals(n[i])) res=false;
         }else res=false;
-        //if(m[0].equals("polyethylene") && m[0].equals(n[0])){
+        //if(m[0].equals("15") && m[0].equals(n[0])){
         //    System.out.println(Arrays.toString(n));
         //    System.out.println(Arrays.toString(m));
         //}
@@ -362,8 +362,3 @@ class Composition extends Material{
     }
 }
 
-/*
-            table4=ParseHTML.readHTML(ParseHTML.getLink(html,"\\s*Table 4.\\s*"));
-            table4 = table4.toLowerCase();
-
-            */
