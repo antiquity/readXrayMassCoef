@@ -19,7 +19,7 @@ public class ParseHTML{
                     new InputStreamReader(html.openStream()));
             String inputLine;
             while ((inputLine = inRead.readLine()) != null)
-                content.append(inputLine+"\n");
+                content.append(inputLine+System.lineSeparator());
             inRead.close();
         }catch(Exception e){
             System.err.println(e);
